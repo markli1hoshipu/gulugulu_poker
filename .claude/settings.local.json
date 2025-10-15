@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat rules.txt)",
+      "Bash(mkdir -p src/core src/engine src/controller src/ui tests)",
+      "Bash(cat README.md)",
+      "Bash(python tests/test_basic.py)",
+      "Bash(python -m tests.test_basic)",
+      "Bash(chcp 65001)",
+      "Bash(npm run dev)",
+      "Bash(python main.py)",
+      "Bash(pip install -r requirements.txt)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :6000)",
+      "Bash(taskkill /PID 17956 /F)",
+      "Bash(taskkill /PID 7720 /F)",
+      "Bash(taskkill //PID 17956 //F)",
+      "Bash(taskkill //PID 7720 //F)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

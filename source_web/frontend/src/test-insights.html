@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Insights Component</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .insight-test {
+            background: linear-gradient(to right, #faf7ff, #eff6ff);
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Insights Component Test</h1>
+
+    <div class="test-section">
+        <h2>Test 1: New String Format (Expected)</h2>
+        <div class="insight-test">
+            <h4>Business Insights</h4>
+            <p>Total revenue is $6,261,238 from 96 customers. Strong revenue performance indicates healthy business activity. Contact 15768 to strengthen this key relationship.</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Legacy Object Format (Backward Compatibility)</h2>
+        <div class="insight-test">
+            <h4>Business Insights</h4>
+            <p><strong>Summary:</strong> Business performing well</p>
+            <ul>
+                <li>Revenue up 15%</li>
+                <li>Customer retention high</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Instructions</h2>
+        <p>1. Navigate to <a href="http://localhost:8001" target="_blank">http://localhost:8001</a></p>
+        <p>2. Go to the Sales Center or Natural Language Query section</p>
+        <p>3. Try querying: "Show me revenue by customer"</p>
+        <p>4. Verify insights display correctly when returned from backend</p>
+        <p>5. Check that the component handles both string and object formats</p>
+    </div>
+</body>
+</html>

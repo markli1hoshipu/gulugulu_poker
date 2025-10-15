@@ -1,0 +1,3 @@
+@echo off
+echo Starting Gulugulu Poker Backend...
+python main.py
