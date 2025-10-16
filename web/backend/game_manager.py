@@ -7,9 +7,11 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 import logging
+import asyncio
 from typing import Dict, List, Optional
 from src.controller import GameController
 from src.core import GamePhase, Card
+from ai_player import AIPlayerManager
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,8 @@ class GameManager:
         self.players: Dict[str, int] = {}  # sid -> player_id mapping
         self.player_names: Dict[str, str] = {}  # sid -> player_name mapping
         self.game_started = False
+        self.ai_manager = AIPlayerManager()
+        self.game_loop_task = None  # AI游戏循环任务
 
     def add_player(self, sid: str, name: str) -> dict:
         """Add a player to the game"""
@@ -51,17 +55,54 @@ class GameManager:
             'message': f'成功加入游戏，你是玩家 {player_id}'
         }
 
+    def add_ai_player(self) -> dict:
+        """添加AI玩家"""
+        if len(self.players) >= 4:
+            return {
+                'success': False,
+                'message': '游戏已满（4/4玩家）'
+            }
+
+        # 找到下一个可用的player_id（确保不会覆盖现有玩家）
+        existing_player_ids = set(self.players.values())
+        player_id = 0
+        while player_id in existing_player_ids:
+            player_id += 1
+            
+        ai_sid = f"ai_player_{player_id}_{len([sid for sid in self.players if sid.startswith('ai_player_')])}"
+        
+        # 创建AI玩家
+        ai_player = self.ai_manager.create_ai_player(player_id)
+        
+        # 添加到玩家列表
+        self.players[ai_sid] = player_id
+        self.player_names[ai_sid] = ai_player.name
+
+        logger.info(f"AI玩家 {ai_player.name} 加入游戏 (player_id: {player_id}, sid: {ai_sid})")
+
+        return {
+            'success': True,
+            'player_id': player_id,
+            'player_name': ai_player.name,
+            'message': f'AI玩家 {ai_player.name} 加入游戏'
+        }
+
     def remove_player(self, sid: str):
         """Remove a player from the game"""
         if sid in self.players:
             player_id = self.players[sid]
             name = self.player_names.get(sid, 'Unknown')
+            
+            # 如果是AI玩家，也要从AI管理器中移除
+            if sid.startswith('ai_player_'):
+                self.ai_manager.remove_ai_player(player_id)
+                
             del self.players[sid]
             del self.player_names[sid]
             logger.info(f"Player {name} (id: {player_id}) removed")
 
-            # Reset game if a player leaves
-            if self.game_started:
+            # Reset game if a human player leaves (not AI)
+            if self.game_started and not sid.startswith('ai_player_'):
                 self.reset_game()
 
     def can_start_game(self) -> bool:
@@ -86,9 +127,30 @@ class GameManager:
 
             logger.info(f"Game started with players: {player_names_list}, now in DEALING phase")
 
+            # 自动发完所有牌 - 3副牌162张，4人每人39张，剩余6张底牌
+            import os
+            cards_per_player_target = int(os.environ.get('CARDS_PER_PLAYER', 39))  # 正确的应该是39张每人
+            total_cards_per_player = 0
+            
+            logger.info(f"开始发牌：总共162张牌，4人每人{cards_per_player_target}张，剩余6张底牌")
+            
+            while total_cards_per_player < cards_per_player_target:
+                cards_to_deal = min(3, cards_per_player_target - total_cards_per_player)  # 每次发3张，最后可能少于3张
+                deal_result = self.controller.deal_next_batch(cards_to_deal)
+                total_cards_per_player += cards_to_deal
+                logger.info(f"发牌批次：每人{cards_to_deal}张，累计每人{total_cards_per_player}张")
+                
+                if deal_result.get('is_complete'):
+                    logger.info(f"发牌完成，每人最终获得牌数: {total_cards_per_player}张")
+                    break
+            
+            # 完成发牌阶段
+            self.controller.complete_dealing()
+            logger.info("All cards dealt, game ready to play")
+
             return {
                 'success': True,
-                'message': '游戏开始！开始发牌...'
+                'message': '发牌完成，游戏开始！'
             }
         except Exception as e:
             logger.error(f"Error starting game: {e}")
@@ -246,6 +308,65 @@ class GameManager:
                 'message': '出牌不合法，请检查规则'
             }
 
+    async def ai_auto_play(self) -> dict:
+        """AI自动出牌"""
+        game_state = self.controller.get_game_state()
+        current_player_id = game_state.current_player
+        
+        # 检查当前玩家是否为AI
+        if not self.ai_manager.is_ai_player(current_player_id):
+            return {'success': False, 'message': '当前玩家不是AI'}
+            
+        ai_player = self.ai_manager.get_ai_player(current_player_id)
+        if not ai_player:
+            return {'success': False, 'message': 'AI玩家不存在'}
+            
+        try:
+            # AI选择牌
+            card_indices = ai_player.choose_cards_to_play(game_state, self.controller.rule_engine)
+            
+            if not card_indices:
+                logger.warning(f"AI {ai_player.name} 没有选择任何牌")
+                return {'success': False, 'message': 'AI没有选择牌'}
+                
+            # 获取选中的牌
+            player = game_state.get_player(current_player_id)
+            if not player:
+                return {'success': False, 'message': '玩家不存在'}
+                
+            # 验证索引
+            if any(i < 0 or i >= len(player.hand) for i in card_indices):
+                logger.error(f"AI {ai_player.name} 选择了无效的牌索引: {card_indices}")
+                return {'success': False, 'message': 'AI选择了无效的牌'}
+                
+            selected_cards = [player.hand[i] for i in card_indices]
+            
+            # 执行出牌
+            success = self.controller.play_cards(current_player_id, selected_cards)
+            
+            if success:
+                logger.info(f"AI {ai_player.name} 成功出牌: {[str(card) for card in selected_cards]}")
+                
+                # 检查游戏状态
+                updated_game_state = self.controller.get_game_state()
+                is_round_end = updated_game_state.phase == GamePhase.ROUND_END
+                is_game_over = self.controller.rule_engine.is_game_over()
+                
+                return {
+                    'success': True,
+                    'message': f'AI {ai_player.name} 出牌成功',
+                    'cards_played': [{'suit': card.suit.value, 'rank': card.rank.value} for card in selected_cards],
+                    'round_end': is_round_end,
+                    'game_end': is_game_over
+                }
+            else:
+                logger.warning(f"AI {ai_player.name} 出牌失败")
+                return {'success': False, 'message': 'AI出牌不合法'}
+                
+        except Exception as e:
+            logger.error(f"AI自动出牌错误: {e}")
+            return {'success': False, 'message': f'AI出牌错误: {str(e)}'}
+
     def get_game_state_for_all(self) -> dict:
         """Get game state for all players"""
         if not self.game_started:
@@ -311,9 +432,30 @@ class GameManager:
             ]
         }
 
+    def clear_ai_players(self):
+        """清除所有AI玩家"""
+        ai_sids = [sid for sid in self.players.keys() if sid.startswith('ai_player_')]
+        for sid in ai_sids:
+            player_id = self.players[sid]
+            name = self.player_names.get(sid, 'Unknown')
+            
+            # 从AI管理器中移除
+            self.ai_manager.remove_ai_player(player_id)
+            
+            # 从玩家列表中移除
+            del self.players[sid]
+            del self.player_names[sid]
+            logger.info(f"清除AI玩家: {name} (id: {player_id})")
+
     def reset_game(self):
         """Reset the game"""
         self.controller = GameController()
         self.game_started = False
-        # Keep players but reset game state
-        logger.info("Game reset")
+        
+        # 清除所有AI玩家
+        self.clear_ai_players()
+        
+        # 清理AI管理器
+        self.ai_manager.clear_all()
+        
+        logger.info("Game reset - AI players cleared")

@@ -1,7 +1,23 @@
 import React from 'react'
-import { Users, Clock } from 'lucide-react'
+import { Users, Clock, Bot } from 'lucide-react'
 
-function WaitingRoom({ gameState, playerName }) {
+function WaitingRoom({ gameState, playerName, socket }) {
+  const handleAddAI = () => {
+    if (socket && gameState.players_needed > 0) {
+      socket.emit('add_ai_player')
+    }
+  }
+
+  const handleClearAI = () => {
+    if (socket) {
+      socket.emit('clear_ai_players')
+    }
+  }
+
+  // 检查是否有AI玩家
+  const hasAIPlayers = gameState.player_list && 
+    gameState.player_list.some(player => player.name.startsWith('AI_'))
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-2xl w-full">
@@ -70,6 +86,28 @@ function WaitingRoom({ gameState, playerName }) {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* AI Controls */}
+        <div className="mt-6 flex justify-center gap-4">
+          {gameState.players_needed > 0 && (
+            <button
+              onClick={handleAddAI}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all transform hover:scale-105 shadow-lg"
+            >
+              <Bot className="w-5 h-5" />
+              添加AI对战 ({gameState.players_needed}个空位)
+            </button>
+          )}
+          
+          {hasAIPlayers && (
+            <button
+              onClick={handleClearAI}
+              className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold rounded-lg hover:from-red-600 hover:to-red-700 transition-all transform hover:scale-105 shadow-lg"
+            >
+              清除AI玩家
+            </button>
+          )}
         </div>
 
         <div className="mt-8 p-4 bg-blue-50 rounded-lg">

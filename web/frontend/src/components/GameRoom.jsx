@@ -75,7 +75,7 @@ function GameRoom({ socket, playerName }) {
   }
 
   if (!gameState.started) {
-    return <WaitingRoom gameState={gameState} playerName={playerName} />
+    return <WaitingRoom gameState={gameState} playerName={playerName} socket={socket} />
   }
 
   return (
@@ -118,8 +118,8 @@ function GameRoom({ socket, playerName }) {
           leadPlayer={gameState.lead_player}
         />
 
-        {/* Players */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+        {/* Players - 改为一列显示，每个玩家区域更大 */}
+        <div className="grid grid-cols-1 gap-6 mt-4">
           {gameState.players && gameState.players.map(player => (
             <PlayerArea
               key={player.id}
@@ -129,6 +129,8 @@ function GameRoom({ socket, playerName }) {
               selectedCards={selectedCards}
               onCardSelect={handleCardSelect}
               onPlayCards={handlePlayCards}
+              trumpSuit={gameState.trump_suit}
+              trumpRank={gameState.trump_rank}
             />
           ))}
         </div>

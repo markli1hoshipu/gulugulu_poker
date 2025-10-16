@@ -84,6 +84,11 @@ class RuleEngine:
     def _validate_follow(self, player: Player, cards: List[Card]) -> Tuple[bool, str]:
         """
         验证跟牌是否合法
+        根据升级/拖拉机规则：
+        1. 必须跟相同数量的牌
+        2. 优先跟首家花色
+        3. 如果无该花色，可出任意其他牌
+        4. 主牌时，可以打出任意主牌或活主
 
         Args:
             player: 跟牌玩家
@@ -96,35 +101,70 @@ class RuleEngine:
             return True, ""
 
         lead_player_id, lead_cards = self.game_state.current_trick[0]
-        lead_pattern = CardPattern(lead_cards)
 
         # 必须跟相同数量的牌
         if len(cards) != len(lead_cards):
             return False, f"必须出{len(lead_cards)}张牌"
 
-        # 必须跟相同花色（如果有）
         trump_suit = self.game_state.trump_suit
         trump_rank = self.game_state.trump_rank
 
-        # 判断领牌是主牌还是副牌
-        lead_is_trump = any(card.is_trump(trump_suit, trump_rank) for card in lead_cards)
+        # 判断领牌的有效花色类型
+        lead_effective_suit = self._get_effective_suit_type(lead_cards[0], trump_suit, trump_rank)
+        
+        # 获取玩家手中相同有效花色的牌
+        same_suit_cards = []
+        for card in player.hand:
+            if self._get_effective_suit_type(card, trump_suit, trump_rank) == lead_effective_suit:
+                same_suit_cards.append(card)
 
-        # 获取玩家手中的相同类型牌
-        if lead_is_trump:
-            same_type_cards = [c for c in player.hand if c.is_trump(trump_suit, trump_rank)]
-        else:
-            lead_suit = lead_cards[0].suit
-            same_type_cards = [c for c in player.hand
-                             if c.suit == lead_suit and not c.is_trump(trump_suit, trump_rank)]
-
-        # 如果有相同类型的牌，必须出
-        if same_type_cards:
-            # 简化规则：只要有相同类型的牌即可（实际需要检查牌型匹配）
-            has_same_type = any(card in same_type_cards for card in cards)
-            if not has_same_type:
-                return False, "必须跟相同花色/类型的牌"
-
+        # 如果有相同花色的牌，必须出相同花色
+        if same_suit_cards:
+            # 检查出的牌是否都是相同花色
+            for card in cards:
+                if self._get_effective_suit_type(card, trump_suit, trump_rank) != lead_effective_suit:
+                    return False, f"必须跟{self._get_suit_name(lead_effective_suit)}"
+            
+            # 对于多张牌，还需要检查是否有足够的同花色牌来满足要求
+            if len(same_suit_cards) < len(cards):
+                return False, f"没有足够的{self._get_suit_name(lead_effective_suit)}牌"
+        
+        # 如果没有相同花色牌，可以出任意牌
         return True, ""
+
+    def _get_effective_suit_type(self, card: Card, trump_suit: Optional[Suit], trump_rank: Rank) -> str:
+        """
+        获取牌的有效花色类型
+        
+        Args:
+            card: 牌
+            trump_suit: 主花色
+            trump_rank: 主牌级别
+            
+        Returns:
+            str: 有效花色类型
+        """
+        # 判断是否为主牌
+        if card.is_trump(trump_suit, trump_rank):
+            return "TRUMP"
+        
+        # 副牌按实际花色分类
+        return card.suit.value
+
+    def _get_suit_name(self, suit_type: str) -> str:
+        """获取花色名称"""
+        if suit_type == "TRUMP":
+            return "主牌"
+        elif suit_type == "♠":
+            return "黑桃"
+        elif suit_type == "♥":
+            return "红桃"
+        elif suit_type == "♣":
+            return "梅花"
+        elif suit_type == "♦":
+            return "方块"
+        else:
+            return suit_type
 
     def determine_trick_winner(self) -> int:
         """
@@ -183,4 +223,16 @@ class RuleEngine:
         Returns:
             是否结束
         """
-        return all(player.get_hand_size() == 0 for player in self.game_state.players)
+        # 如果没有玩家或玩家数量不足，游戏未结束
+        if not self.game_state.players or len(self.game_state.players) < 4:
+            return False
+            
+        # 检查是否所有玩家都出完牌，并且至少有人有过牌
+        players_with_no_cards = [p for p in self.game_state.players if p.get_hand_size() == 0]
+        
+        # 只有当所有玩家都有牌过并且现在都没牌时，游戏才结束
+        if len(players_with_no_cards) == len(self.game_state.players):
+            # 额外检查：确保游戏真的进行过（有过出牌记录）
+            return len(self.game_state.trick_history) > 0
+            
+        return False
