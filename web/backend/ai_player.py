@@ -50,7 +50,7 @@ class AIPlayer:
     
     def _choose_lead_cards(self, hand: List[Card], game_state) -> List[int]:
         """
-        AI选择领牌 - 使用更智能的策略
+        AI选择领牌 - 符合新规则：必须出1、2或3张完全相同的牌（同花色同点数）
         
         Args:
             hand: 手牌
@@ -65,42 +65,64 @@ class AIPlayer:
         trump_suit = game_state.trump_suit
         trump_rank = game_state.trump_rank
         
-        # 将手牌按类型分组
-        trump_cards = []
-        side_suits = {"♠": [], "♥": [], "♦": [], "♣": []}
-        
+        # 按完全相同的牌进行分组（同花色同点数）
+        exact_groups = {}
         for i, card in enumerate(hand):
-            if card.is_trump(trump_suit, trump_rank):
-                trump_cards.append(i)
-            else:
-                side_suits[card.suit.value].append(i)
+            # 使用花色+点数作为键
+            card_key = f"{card.suit.value if card.suit else ''}{card.rank.value if card.rank else str(card)}"
+            if card_key not in exact_groups:
+                exact_groups[card_key] = []
+            exact_groups[card_key].append(i)
         
         # 策略1: 优先出副牌中的单张（避免被拖拉机）
-        for suit, indices in side_suits.items():
-            if len(indices) == 1:  # 单张副牌
-                logger.info(f"AI {self.name} 领牌选择单张副牌: {hand[indices[0]]} (索引: {indices[0]})")
-                return [indices[0]]
+        for card_key, indices in exact_groups.items():
+            if len(indices) == 1:  # 单张
+                card_idx = indices[0]
+                card = hand[card_idx]
+                if not card.is_trump(trump_suit, trump_rank):  # 优先出副牌单张
+                    logger.info(f"AI {self.name} 领牌选择单张副牌: {card} (索引: {card_idx})")
+                    return [card_idx]
         
-        # 策略2: 出副牌中数量较少的花色
-        non_empty_suits = [(suit, indices) for suit, indices in side_suits.items() if indices]
-        if non_empty_suits:
-            # 按数量排序，选择最少的
-            non_empty_suits.sort(key=lambda x: len(x[1]))
-            suit, indices = non_empty_suits[0]
-            selected_index = random.choice(indices)
-            logger.info(f"AI {self.name} 领牌选择较少副牌: {hand[selected_index]} (索引: {selected_index})")
+        # 策略2: 出完全相同的对子（如果有的话）
+        for card_key, indices in exact_groups.items():
+            if len(indices) >= 2:
+                # 选择前两张作为对子
+                selected = indices[:2]
+                cards_str = ", ".join(str(hand[i]) for i in selected)
+                logger.info(f"AI {self.name} 领牌选择完全相同的对子: {cards_str} (索引: {selected})")
+                return selected
+        
+        # 策略3: 如果只有单张，选择较小的副牌
+        side_cards = []
+        for card_key, indices in exact_groups.items():
+            if len(indices) == 1:  # 只考虑单张
+                idx = indices[0]
+                card = hand[idx]
+                if not card.is_trump(trump_suit, trump_rank):
+                    side_cards.append((idx, card.get_power(trump_suit, trump_rank)))
+        
+        if side_cards:
+            side_cards.sort(key=lambda x: x[1])  # 按牌力排序
+            selected_index = side_cards[0][0]
+            logger.info(f"AI {self.name} 领牌选择小副牌: {hand[selected_index]} (索引: {selected_index})")
             return [selected_index]
         
-        # 策略3: 如果只有主牌，随机选择一张小主牌
+        # 策略4: 如果只有主牌，选择较小的主牌单张
+        trump_cards = []
+        for card_key, indices in exact_groups.items():
+            if len(indices) == 1:  # 只考虑单张
+                idx = indices[0]
+                card = hand[idx]
+                if card.is_trump(trump_suit, trump_rank):
+                    trump_cards.append((idx, card.get_power(trump_suit, trump_rank)))
+        
         if trump_cards:
-            # 尝试选择较小的主牌
-            trump_powers = [(i, hand[i].get_power(trump_suit, trump_rank)) for i in trump_cards]
-            trump_powers.sort(key=lambda x: x[1])  # 按牌力排序
-            selected_index = trump_powers[0][0]  # 选择最小的
+            trump_cards.sort(key=lambda x: x[1])  # 按牌力排序
+            selected_index = trump_cards[0][0]
             logger.info(f"AI {self.name} 领牌选择小主牌: {hand[selected_index]} (索引: {selected_index})")
             return [selected_index]
         
-        # 兜底: 随机选择
+        # 兜底: 随机选择一张
         selected_index = random.randint(0, len(hand) - 1)
         logger.info(f"AI {self.name} 领牌随机选择: {hand[selected_index]} (索引: {selected_index})")
         return [selected_index]
@@ -223,8 +245,9 @@ class AIPlayer:
             remaining_count = lead_count - len(same_suit_indices)
             if remaining_count <= len(other_suit_indices):
                 from itertools import combinations
+                # 必须包含所有同花色的牌
                 for other_combo in combinations(other_suit_indices, remaining_count):
-                    combo = same_suit_indices + list(other_combo)
+                    combo = same_suit_indices.copy() + list(other_combo)
                     valid_combinations.append(combo)
         else:
             # 没有相同花色牌，可以随意组合

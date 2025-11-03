@@ -64,8 +64,6 @@ class CardManager:
             player.clear_hand()
 
         total_cards = len(self.deck)
-        print(f"牌堆总数: {total_cards}张 (3副牌×54张={3*54}张)")
-        print(f"预期分配: 4人×39张={4*39}张 + 底牌6张 = {4*39+6}张")
         
         return total_cards
 
@@ -88,32 +86,32 @@ class CardManager:
         if len(players) != 4:
             raise ValueError("必须有4个玩家")
 
+        # 计算可发牌总数（保留6张底牌）
+        available_total = self.deck.remaining() - 6
+        if available_total < 0:
+            available_total = 0
+            
+        # 计算每个玩家能发多少张牌
+        if available_total >= len(players) * cards_per_player:
+            # 足够每人发指定数量
+            cards_per_player_actual = cards_per_player
+        else:
+            # 不够的话平均分配
+            cards_per_player_actual = available_total // len(players)
+        
         for player in players:
-            # 确保每个玩家都能得到相同数量的牌（保留6张底牌）
-            if self.deck.remaining() > 6:
-                # 每个玩家最多能发的牌数
-                max_per_player = cards_per_player
-                available_total = self.deck.remaining() - 6  # 减去底牌
-                
-                # 如果剩余牌数不够所有玩家每人发这么多，就平均分配
-                if available_total < len(players) * cards_per_player:
-                    max_per_player = available_total // len(players)
-                
-                can_deal = min(max_per_player, cards_per_player)
-                
-                if can_deal > 0:
-                    cards = self.deck.draw(can_deal)
-                    player.add_cards(cards)
-                    dealt_cards.append((player.player_id, cards))
-                else:
-                    dealt_cards.append((player.player_id, []))
+            if cards_per_player_actual > 0 and self.deck.remaining() > 6:
+                cards = self.deck.draw(cards_per_player_actual)
+                player.add_cards(cards)
+                dealt_cards.append((player.player_id, cards))
             else:
                 dealt_cards.append((player.player_id, []))
 
         # 检查是否发完（只剩6张底牌）
-        is_complete = self.deck.remaining() == 6
+        remaining_after = self.deck.remaining()
+        is_complete = remaining_after == 6
 
-        return dealt_cards, is_complete, self.deck.remaining()
+        return dealt_cards, is_complete, remaining_after
 
     def get_bottom_cards(self) -> List[Card]:
         """获取剩余的底牌"""

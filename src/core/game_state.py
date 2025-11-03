@@ -59,9 +59,11 @@ class GameState:
 
         # 本局收集的分数牌
         self.collected_points: Dict[int, int] = {0: 0, 1: 0}
+        self.scoring_cards: Dict[int, List[Card]] = {0: [], 1: []}  # 每队获得的分数牌
 
         # 历史记录
         self.trick_history: List[List[tuple]] = []  # 每轮出牌历史
+        self.play_history: List[Dict] = []  # 所有出牌历史记录
         self.round_number: int = 0  # 轮数
 
     def add_player(self, player: Player):

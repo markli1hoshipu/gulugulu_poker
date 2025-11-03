@@ -303,9 +303,15 @@ class GameManager:
                 'game_end': is_game_over
             }
         else:
+            # Get the actual error message from rule engine
+            game_state = self.controller.get_game_state()
+            player = game_state.get_player(player_id)
+            validation_result = self.controller.rule_engine.validate_play(player, selected_cards)
+            error_msg = validation_result[1] if len(validation_result) > 1 else '出牌不合法'
+            
             return {
                 'success': False,
-                'message': '出牌不合法，请检查规则'
+                'message': error_msg
             }
 
     async def ai_auto_play(self) -> dict:
@@ -402,6 +408,20 @@ class GameManager:
                 'cards': [{'suit': card.suit.value, 'rank': card.rank.value} for card in cards]
             })
 
+        # Format scoring cards for display
+        scoring_cards_data = {
+            0: [{'suit': card.suit.value if card.suit else '', 'rank': card.rank.value if card.rank else str(card)} 
+                for card in game_state.scoring_cards[0]],
+            1: [{'suit': card.suit.value if card.suit else '', 'rank': card.rank.value if card.rank else str(card)} 
+                for card in game_state.scoring_cards[1]]
+        }
+
+        # Format bottom cards for display
+        bottom_cards_data = []
+        if game_state.bottom_cards:
+            bottom_cards_data = [{'suit': card.suit.value if card.suit else '', 'rank': card.rank.value if card.rank else str(card)} 
+                               for card in game_state.bottom_cards]
+
         return {
             'started': True,
             'phase': game_state.phase.value,
@@ -417,6 +437,9 @@ class GameManager:
             'players': players_data,
             'current_trick': current_trick,
             'team_scores': game_state.collected_points,
+            'scoring_cards': scoring_cards_data,
+            'bottom_cards': bottom_cards_data,
+            'play_history': game_state.play_history[-20:],  # Send last 20 plays
             'team_levels': game_state.team_levels,
             'game_over': self.controller.rule_engine.is_game_over()
         }
@@ -430,6 +453,49 @@ class GameManager:
                 {'id': pid, 'name': self.player_names[sid]}
                 for sid, pid in sorted(self.players.items(), key=lambda x: x[1])
             ]
+        }
+
+    def remove_player_by_id(self, player_id_to_remove: int) -> dict:
+        """根据player_id移除特定玩家"""
+        if self.game_started:
+            return {
+                'success': False,
+                'message': '游戏已开始，无法移除玩家'
+            }
+        
+        # 找到对应的sid
+        target_sid = None
+        for sid, pid in self.players.items():
+            if pid == player_id_to_remove:
+                target_sid = sid
+                break
+        
+        if not target_sid:
+            return {
+                'success': False,
+                'message': f'未找到玩家 {player_id_to_remove}'
+            }
+        
+        # 获取玩家信息
+        player_name = self.player_names.get(target_sid, f'Player_{player_id_to_remove}')
+        
+        # 如果是AI玩家，从AI管理器中移除
+        if target_sid.startswith('ai_player_'):
+            self.ai_manager.remove_ai_player(player_id_to_remove)
+        
+        # 从玩家列表中移除
+        del self.players[target_sid]
+        del self.player_names[target_sid]
+        
+        logger.info(f"移除玩家: {player_name} (id: {player_id_to_remove})")
+        
+        return {
+            'success': True,
+            'message': f'成功移除玩家 {player_name}',
+            'removed_player': {
+                'id': player_id_to_remove,
+                'name': player_name
+            }
         }
 
     def clear_ai_players(self):

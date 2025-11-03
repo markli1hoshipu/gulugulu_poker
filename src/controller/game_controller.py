@@ -221,6 +221,14 @@ class GameController:
         # 执行出牌
         player.remove_cards(cards)
         self.game_state.add_to_trick(player_id, cards)
+        
+        # 记录出牌历史
+        self.game_state.play_history.append({
+            'player_id': player_id,
+            'player_name': player.name,
+            'cards': [{'suit': c.suit.value if c.suit else '', 'rank': c.rank.value if c.rank else str(c)} for c in cards],
+            'round': self.game_state.round_number
+        })
 
         # 如果是领牌，设置领牌花色
         if player_id == self.game_state.lead_player and cards:
@@ -249,10 +257,14 @@ class GameController:
 
         points = self.score_calculator.calculate_trick_points(all_cards)
 
-        # 赢家所在队伍得分
+        # 赢家所在队伍得分并记录得分牌
         if winner:
             team = winner.team
             self.game_state.collected_points[team] += points
+            
+            # 记录得分牌（5、10、K）
+            scoring_cards = [c for c in all_cards if c.rank in [Rank.FIVE, Rank.TEN, Rank.KING]]
+            self.game_state.scoring_cards[team].extend(scoring_cards)
 
         # 清空本轮
         self.game_state.clear_trick()

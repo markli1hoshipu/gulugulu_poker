@@ -74,12 +74,44 @@ class RuleEngine:
             if not player.has_card(card):
                 return False, f"玩家没有这张牌: {card}"
 
-        # 如果是领牌玩家，可以随意出牌
+        # 如果是领牌玩家，验证出牌规则
         if player.player_id == self.game_state.lead_player:
-            return True, ""
+            return self._validate_lead_play(cards)
 
         # 跟牌规则
         return self._validate_follow(player, cards)
+
+    def _validate_lead_play(self, cards: List[Card]) -> Tuple[bool, str]:
+        """
+        验证领牌玩家出牌是否合法
+        规则：必须出1张、2张或3张完全相同的牌（同花色同点数）
+        
+        Args:
+            cards: 要出的牌
+            
+        Returns:
+            (是否合法, 错误信息)
+        """
+        # 检查牌数量
+        if len(cards) < 1 or len(cards) > 3:
+            return False, "领牌玩家必须出1张、2张或3张牌"
+        
+        # 如果是单张，直接合法
+        if len(cards) == 1:
+            return True, ""
+        
+        # 如果是多张，必须是完全相同的牌（同花色同点数）
+        first_card = cards[0]
+        first_rank = first_card.rank
+        first_suit = first_card.suit
+        
+        for card in cards[1:]:
+            if card.rank != first_rank:
+                return False, "领牌时多张牌必须是相同点数"
+            if card.suit != first_suit:
+                return False, "领牌时多张牌必须是相同花色"
+        
+        return True, ""
 
     def _validate_follow(self, player: Player, cards: List[Card]) -> Tuple[bool, str]:
         """

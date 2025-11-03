@@ -1,5 +1,5 @@
 import React from 'react'
-import { Users, Clock, Bot } from 'lucide-react'
+import { Users, Clock, Bot, X } from 'lucide-react'
 
 function WaitingRoom({ gameState, playerName, socket }) {
   const handleAddAI = () => {
@@ -11,6 +11,12 @@ function WaitingRoom({ gameState, playerName, socket }) {
   const handleClearAI = () => {
     if (socket) {
       socket.emit('clear_ai_players')
+    }
+  }
+
+  const handleRemovePlayer = (playerId) => {
+    if (socket) {
+      socket.emit('remove_player_by_id', { player_id: playerId })
     }
   }
 
@@ -63,13 +69,25 @@ function WaitingRoom({ gameState, playerName, socket }) {
                       {player.name === playerName && (
                         <span className="ml-2 text-sm text-purple-600">(你)</span>
                       )}
+                      {player.name.startsWith('AI_') && (
+                        <span className="ml-2 text-sm text-blue-600">(AI)</span>
+                      )}
                     </p>
                     <p className="text-sm text-gray-600">
                       {index % 2 === 0 ? '甲队' : '乙队'}
                     </p>
                   </div>
                 </div>
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <button
+                    onClick={() => handleRemovePlayer(player.id)}
+                    className="w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors opacity-70 hover:opacity-100"
+                    title={`移除 ${player.name}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -113,6 +131,9 @@ function WaitingRoom({ gameState, playerName, socket }) {
         <div className="mt-8 p-4 bg-blue-50 rounded-lg">
           <p className="text-sm text-blue-800 text-center">
             当4名玩家全部加入后，游戏将自动开始
+          </p>
+          <p className="text-xs text-blue-600 text-center mt-1">
+            点击玩家右侧的 ✕ 按钮可以移除该玩家
           </p>
         </div>
       </div>

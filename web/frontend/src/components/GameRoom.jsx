@@ -3,6 +3,8 @@ import toast from 'react-hot-toast'
 import PlayerArea from './PlayerArea'
 import GameBoard from './GameBoard'
 import ScoreBoard from './ScoreBoard'
+import PlayHistory from './PlayHistory'
+import BottomCards from './BottomCards'
 import WaitingRoom from './WaitingRoom'
 
 function GameRoom({ socket, playerName }) {
@@ -81,58 +83,88 @@ function GameRoom({ socket, playerName }) {
   return (
     <div className="min-h-screen p-4">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-800">咕噜咕噜扑克</h1>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600">
-                <span className="font-semibold">主花色:</span>{' '}
-                <span className="text-lg">{gameState.trump_suit || '无'}</span>
-              </div>
-              <div className="text-sm text-gray-600">
-                <span className="font-semibold">级别:</span>{' '}
-                <span className="font-medium">{gameState.trump_rank}</span>
-              </div>
-              <div className="text-sm text-gray-600">
-                <span className="font-semibold">轮数:</span>{' '}
-                <span className="font-medium">{gameState.round_number}</span>
-              </div>
-              <button
-                onClick={handleRestart}
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-              >
-                重新开始
-              </button>
+        <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
+          {/* Bottom Cards Sidebar */}
+          <div className="lg:col-span-1 order-2 lg:order-1">
+            <div className="sticky top-4 h-[calc(100vh-2rem)]">
+              <BottomCards 
+                bottomCards={gameState.bottom_cards}
+                gamePhase={gameState.phase}
+                isDealer={gameState.dealer_id !== undefined && gameState.players && gameState.players.find(p => p.name === playerName)?.id === gameState.dealer_id}
+                canViewBottom={gameState.phase === 'bottom_reveal' || gameState.phase === 'bottom_bury'}
+              />
             </div>
           </div>
-        </div>
 
-        {/* Score Board */}
-        <ScoreBoard teamScores={gameState.team_scores} />
+          {/* Main Game Area */}
+          <div className="lg:col-span-4 order-1 lg:order-2">
+            {/* Header */}
+            <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
+              <div className="flex justify-between items-center">
+                <h1 className="text-2xl font-bold text-gray-800">咕噜咕噜扑克</h1>
+                <div className="flex items-center gap-4">
+                  <div className="text-sm text-gray-600">
+                    <span className="font-semibold">主花色:</span>{' '}
+                    <span className="text-lg">{gameState.trump_suit || '无'}</span>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    <span className="font-semibold">级别:</span>{' '}
+                    <span className="font-medium">{gameState.trump_rank}</span>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    <span className="font-semibold">轮数:</span>{' '}
+                    <span className="font-medium">{gameState.round_number}</span>
+                  </div>
+                  <button
+                    onClick={handleRestart}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+                  >
+                    重新开始
+                  </button>
+                </div>
+              </div>
+            </div>
 
-        {/* Game Board - Current Trick */}
-        <GameBoard
-          currentTrick={gameState.current_trick}
-          players={gameState.players}
-          leadPlayer={gameState.lead_player}
-        />
-
-        {/* Players - 改为一列显示，每个玩家区域更大 */}
-        <div className="grid grid-cols-1 gap-6 mt-4">
-          {gameState.players && gameState.players.map(player => (
-            <PlayerArea
-              key={player.id}
-              player={player}
-              isCurrentPlayer={player.id === gameState.current_player}
-              isSelf={player.name === playerName}
-              selectedCards={selectedCards}
-              onCardSelect={handleCardSelect}
-              onPlayCards={handlePlayCards}
-              trumpSuit={gameState.trump_suit}
-              trumpRank={gameState.trump_rank}
+            {/* Score Board */}
+            <ScoreBoard 
+              teamScores={gameState.team_scores} 
+              scoringCards={gameState.scoring_cards}
             />
-          ))}
+
+            {/* Game Board - Current Trick */}
+            <GameBoard
+              currentTrick={gameState.current_trick}
+              players={gameState.players}
+              leadPlayer={gameState.lead_player}
+            />
+
+            {/* Players - 改为一列显示，每个玩家区域更大 */}
+            <div className="grid grid-cols-1 gap-6 mt-4">
+              {gameState.players && gameState.players.map(player => (
+                <PlayerArea
+                  key={player.id}
+                  player={player}
+                  isCurrentPlayer={player.id === gameState.current_player}
+                  isSelf={player.name === playerName}
+                  selectedCards={selectedCards}
+                  onCardSelect={handleCardSelect}
+                  onPlayCards={handlePlayCards}
+                  trumpSuit={gameState.trump_suit}
+                  trumpRank={gameState.trump_rank}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Play History Sidebar */}
+          <div className="lg:col-span-1 order-3">
+            <div className="sticky top-4 h-[calc(100vh-2rem)]">
+              <PlayHistory 
+                playHistory={gameState.play_history} 
+                players={gameState.players}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Game Over */}

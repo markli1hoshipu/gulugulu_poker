@@ -118,6 +118,9 @@ async def join_game(sid, data):
             logger.info("4 players joined, starting game...")
             start_result = game_manager.start_game()
             await broadcast_game_state()
+            
+            # Check if the first player is AI and trigger AI turn
+            await trigger_ai_turn_if_needed()
     else:
         await sio.emit('join_error', result, to=sid)
 
@@ -232,8 +235,8 @@ async def add_ai_player(sid):
                 start_result = game_manager.start_game()
                 await broadcast_game_state()
                 
-                # 启动AI游戏循环
-                await start_ai_game_loop()
+                # Check if the first player is AI and trigger AI turn
+                await trigger_ai_turn_if_needed()
         else:
             logger.error(f"Failed to add AI player: {result['message']}")
             await sio.emit('ai_add_error', result, to=sid)
@@ -252,6 +255,28 @@ async def clear_ai_players(sid):
 
 
 @sio.event
+async def remove_player_by_id(sid, data):
+    """Handle removing a specific player by ID"""
+    try:
+        player_id_to_remove = data.get('player_id')
+        logger.info(f"Remove player {player_id_to_remove} requested by {sid[:6]}")
+        
+        result = game_manager.remove_player_by_id(player_id_to_remove)
+        
+        if result['success']:
+            logger.info(f"Player {player_id_to_remove} removed successfully")
+            # Broadcast updated game state to all players
+            await broadcast_game_state()
+        else:
+            logger.error(f"Failed to remove player: {result['message']}")
+            await sio.emit('remove_player_error', result, to=sid)
+            
+    except Exception as e:
+        logger.error(f"Exception in remove_player_by_id: {e}")
+        await sio.emit('remove_player_error', {'success': False, 'message': f'Error: {str(e)}'}, to=sid)
+
+
+@sio.event
 async def restart_game(sid):
     """Handle game restart request"""
     logger.info(f"Game restart requested by {sid[:6]}")
@@ -265,63 +290,20 @@ async def broadcast_game_state():
     await sio.emit('game_state', state, room=None)
 
 
-async def start_ai_game_loop():
-    """启动AI游戏循环"""
-    async def ai_game_loop():
-        while game_manager.game_started:
-            try:
-                await asyncio.sleep(1)  # 等待1秒
-                
-                game_state = game_manager.get_game_state_for_all()
-                if not game_state.get('started'):
-                    break
-                    
-                current_player_id = game_state.get('current_player')
-                if current_player_id is not None and game_manager.ai_manager.is_ai_player(current_player_id):
-                    logger.info(f"AI玩家 {current_player_id} 的回合，自动出牌...")
-                    
-                    # 等待一小段时间让玩家看到状态变化
-                    await asyncio.sleep(1)
-                    
-                    # AI自动出牌
-                    result = await game_manager.ai_auto_play()
-                    
-                    if result['success']:
-                        # 广播游戏状态
-                        await broadcast_game_state()
-                        
-                        # 检查游戏是否结束
-                        if result.get('round_end'):
-                            await sio.emit('round_complete', result, room=None)
-                        if result.get('game_end'):
-                            await sio.emit('game_complete', result, room=None)
-                            # 游戏结束后清理AI玩家
-                            game_manager.clear_ai_players()
-                            await broadcast_game_state()
-                            break
-                    else:
-                        logger.error(f"AI自动出牌失败: {result.get('message')}")
-                        
-            except Exception as e:
-                logger.error(f"AI游戏循环错误: {e}")
-                break
-                
-        logger.info("AI游戏循环结束")
-    
-    # 启动异步任务
-    asyncio.create_task(ai_game_loop())
-
 
 async def trigger_ai_turn_if_needed():
     """如果当前轮到AI玩家，触发AI自动出牌"""
     try:
         game_state = game_manager.get_game_state_for_all()
         if not game_state.get('started'):
+            logger.info("游戏未开始，跳过AI触发")
             return
             
         current_player_id = game_state.get('current_player')
+        logger.info(f"检查当前玩家 {current_player_id} 是否为AI")
+        
         if current_player_id is not None and game_manager.ai_manager.is_ai_player(current_player_id):
-            logger.info(f"触发AI玩家 {current_player_id} 自动出牌")
+            logger.info(f"AI玩家 {current_player_id} 触发自动出牌")
             
             # 稍微延迟，让玩家看到游戏状态变化
             await asyncio.sleep(2)
@@ -330,6 +312,7 @@ async def trigger_ai_turn_if_needed():
             result = await game_manager.ai_auto_play()
             
             if result['success']:
+                logger.info(f"AI玩家 {current_player_id} 出牌成功")
                 # 广播游戏状态
                 await broadcast_game_state()
                 
@@ -346,6 +329,8 @@ async def trigger_ai_turn_if_needed():
                     await trigger_ai_turn_if_needed()
             else:
                 logger.error(f"AI自动出牌失败: {result.get('message')}")
+        else:
+            logger.info(f"当前玩家 {current_player_id} 不是AI，无需触发")
                 
     except Exception as e:
         logger.error(f"触发AI回合错误: {e}")
